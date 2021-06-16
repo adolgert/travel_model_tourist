@@ -10,54 +10,102 @@ using Distributions
 using Random
 using Turing
 using StatsPlots
+using RCall
+using Pkg
+
+# Installation of RCall so that it uses the existing installation.
+# ENV["R_HOME"]="/usr/lib/R"
+# Pkg.build("RCall")
 
 r"""
 This gravity model is from Eqs. 1 and 2 from the Marshall paper.
 """
-gravity_model(α, ρ, τ, Nj, dij) = Nj^τ * (one(dij) + dij / ρ)^(-α)
-params = Dict(:alpha => 3.62, :rho => exp(5.90), :tau => 0.86)
+gravity_model(Nj, dij, θ) = Nj^θ[:τ] * (one(dij) + dij / θ[:ρ])^(-θ[:α])
+tourist_model(dest_kernel, Nj, dij, Xj, θ) = dest_kernel(Nj, dij, θ) * exp(θ[:β] * Xj)
 
-K = 100
-# K is the number of sites, so K - 1 is the number of destinations.
+# params = (β = 0.3, α = 3.62, ρ = exp(5.90), τ = 0.86)
+params = (β = 0.3, α = 3.62, ρ = 0.1, τ = 1.0)
+
+xp = 0:0.01:1
+yp = map(x -> gravity_model(1, x, params), xp)
+# plot(xp, yp)
+# plot(xp, pdf.(Distributions.Beta(2, 2), xp))
+
 rng = Random.MersenneTwister(9283742)
-locations = rand(rng, Float64, (2, K))
+
+r"""
+Makes points in a [0, 1] x [0, 1] square according to a process.
+If you ask for K points, you will usually get fewer points back.
+This returns a (2, N) array of floats.
+It matters if our locations are sometimes too close to each other.
+It may matter if they are correlated. This is how we use the excellent
+functions in R's spatstat to generate those spatial point processes.
+"""
+function hard_sphere_process(K, dcore = 0.02)
+    @rput K
+    @rput dcore
+    rloc = R"""
+        library(spatstat)
+        rHardcore(K, dcore)
+        """
+    x = rcopy(rloc[:x])
+    y = rcopy(rloc[:y])
+    transpose(hcat(x, y))
+end
+
+K_requested = 100
+# K is the number of sites, so K - 1 is the number of destinations.
+# locations = rand(rng, Float64, (2, K))
+locations = hard_sphere_process(K_requested, 0.02)
+K = size(locations, 2)
 distance_matrix = Distances.pairwise(
     Distances.Euclidean(), locations, locations, dims = 2)
 Nj = 1000 .+ 100*randn(rng, K)
 
+
 # This will fit a gravity model. Just that.
 p = zeros(Float64, K - 1)
 for gen_idx in 1:K-1
-    p[gen_idx] = gravity_model(
-        3.62, 0.2, 1, Nj[gen_idx + 1], distance_matrix[gen_idx + 1, 1])
+    p[gen_idx] = gravity_model(Nj[gen_idx + 1], distance_matrix[gen_idx + 1, 1], params)
 end
 p = p ./ sum(p)
-trips = rand(rng, Multinomial(10000, p))
+draws = 10000
+trips = rand(rng, Multinomial(draws, p))
 
 
-@model function gravity_model(x = missing, ::Type{T} = Float64) where {T <: Real}
+@model function inference_model(x = missing, ::Type{T} = Float64) where {T <: Real}
     if x === missing
         x = TArray(T, K - 1)
     end
-    s ~ InverseGamma(2, 3)  # error on observation.
-    a ~ Gamma(2, 3)
-    r ~ Gamma(2, 0.2)
-    k = TArray(T, K - 1)
+    # a ~ Turing.Beta(2, 2)
+    # α = 1.0 + 3.0 * a
+    α ~ Turing.Uniform(1, 4)
+    # r ~ Turing.Beta(2, 2)
+    # ρ = 0.05 + 0.3 * r # Turing.Uniform(0.05, 0.3)
+    ρ ~ Turing.Uniform(0.05, 3)
+    k = Turing.TArray(T, K - 1)
     for kidx in 1:K - 1
-        k[kidx] = Nj[kidx] * (one(T) + distance_matrix[kidx + 1, 1] / r)^(-a)
+        # k[kidx] = Nj[kidx + 1] * (one(T) + distance_matrix[kidx + 1, 1] / ρ)^(-α)
+        k[kidx] = gravity_model(
+            Nj[kidx + 1], distance_matrix[kidx + 1, 1], (β = 0.3, α = α, ρ = ρ, τ = 1.0))
     end
     ktotal = sum(k)
 
     for dest_idx in 1:K - 1
-        x[dest_idx] ~ Normal(1000 * k[dest_idx] / ktotal, 1000 * sqrt(s))
+        x[dest_idx] ~ Turing.Poisson(draws * k[dest_idx] / ktotal)
     end
-    return s, a, r
+    return α, ρ
 end
 
-
-chn = sample(gravity_model(trips), HMC(0.1, 5), 1000)
+sample_cnt = 1000
+# prior_chain = sample(inference_model, Prior(), sample_cnt)
+# posterior_chain = sample(inference_model(missing), HMC(0.1, 5), sample_cnt)
+# chn = sample(inference_model(trips), HMC(0.1, 5), sample_cnt)
+chn = sample(inference_model(trips), NUTS(0.65), sample_cnt)
 
 describe(chn)
+0.9216 * 3 + 1
+0.05 + 0.3 * 0.2
 
 p = plot(chn)
 savefig("destination.png")

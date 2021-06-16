@@ -26,6 +26,14 @@ BoldFont={*-Bold},
 ItalicFont={*-Italic},
 BoldItalicFont={*-BoldItalic}]
 
+\setmonofont{Courier}
+\newfontfamily{\courier}{Courier}
+\setmonofont{Ubuntu}
+\newfontfamily{\ubuntu}{Ubuntu}
+\lstset{
+  basicstyle=\ubuntu\scriptsize
+}
+
 \hypersetup{colorlinks=true,linkcolor=blue,citecolor=violet}
 
 \newcommand{\map}{\textsc{map}\xspace}
@@ -269,6 +277,21 @@ chn = sample(gravity_model(trips), HMC(0.1, 5), 1000)
 The fit isn't great with these priors. I need to plot some things, be more careful.
 
 I'm wondering what data we should assume for a travel model that has tourist covariates. That would determine the form of this kind of inference.
+
+\section{Influence Curve}
+
+Let's stick with the destination kernel, not the full Simple Trip travel model, and let's calculate the influence curve as we turn on the tourist index.
+
+Take a gravity kernel
+\begin{equation}
+k(d_{i,j}) = \left(1+\frac{d_{i,j}}{\rho}\right)^{-\alpha}
+\end{equation}
+which inserts into a destination probability $P(j|i)\propto N_j^{\tau}k(d_{i,j})$. We can set $\tau=1$ and then vary it later. For our tourist model,
+\begin{equation}
+  P(j|i) = \frac{k(d_{i,j})\exp(\beta X_j)}{\sum_{j} k(d_{i,j})\exp(\beta X_j)}.
+\end{equation}
+
+How can we get an influence curve? Generate data from a tourist model. Fit without a tourist model. Then introduce a covariate on one place? If we set a small value for the covariate, then that doesn't do much because it would just give us a larger $\beta$. Or do we add a site and see how that affects the estimate?
 
 \bibliographystyle{ieeetr}
 \bibliography{tourist}
