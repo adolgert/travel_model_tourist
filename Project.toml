@@ -1,4 +1,5 @@
 [deps]
+Bijectors = "76274a88-744f-5084-9051-94815aaf08c4"
 Distances = "b4f34e82-e78d-54a5-968a-f98e89d6e8f7"
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 Geodesy = "0ef565a4-170c-5f04-8de2-149903a85f3d"

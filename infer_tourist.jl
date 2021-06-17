@@ -61,12 +61,14 @@ K = size(locations, 2)
 distance_matrix = Distances.pairwise(
     Distances.Euclidean(), locations, locations, dims = 2)
 Nj = 1000 .+ 100*randn(rng, K)
-
+Xj = rand(rng, Uniform(-1, 1), K)
 
 # This will fit a gravity model. Just that.
 p = zeros(Float64, K - 1)
 for gen_idx in 1:K-1
-    p[gen_idx] = gravity_model(Nj[gen_idx + 1], distance_matrix[gen_idx + 1, 1], params)
+    p[gen_idx] = tourist_model(
+        gravity_model, Nj[gen_idx + 1], distance_matrix[gen_idx + 1, 1], Xj[gen_idx + 1], params
+        )
 end
 p .= p ./ sum(p)
 # Take a look at the largest probabilities
@@ -89,18 +91,19 @@ trips = rand(rng, Multinomial(draws, p))
     # r ~ transformed(ur)
     # ρ = to_ur(r)
     ρ ~ Turing.Uniform(0.05, 3)
+    β ~ Turing.Uniform(0.1, 0.5)
     k = Turing.TArray(T, K - 1)
     for kidx in 1:K - 1
         # k[kidx] = Nj[kidx + 1] * (one(T) + distance_matrix[kidx + 1, 1] / ρ)^(-α)
-        k[kidx] = gravity_model(
-            Nj[kidx + 1], distance_matrix[kidx + 1, 1], (β = 0.3, α = α, ρ = ρ, τ = 1.0))
+        k[kidx] = tourist_model(gravity_model,
+            Nj[kidx + 1], distance_matrix[kidx + 1, 1], Xj[kidx + 1], (β = β, α = α, ρ = ρ, τ = 1.0))
     end
     ktotal = sum(k)
 
     for dest_idx in 1:K - 1
         x[dest_idx] ~ Turing.Poisson(draws * k[dest_idx] / ktotal)
     end
-    return α, ρ
+    return α, ρ, β
 end
 
 sample_cnt = 1000
