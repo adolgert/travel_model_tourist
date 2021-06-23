@@ -278,9 +278,56 @@ The fit isn't great with these priors. I need to plot some things, be more caref
 
 I'm wondering what data we should assume for a travel model that has tourist covariates. That would determine the form of this kind of inference.
 
+\section{Do City Sizes Matter?}
+
+Does it matter whether we fit a travel model to aggregated data instead of fitting it to better-resolved data? When I started to make synthetic data for the pilot model, I wondered how to distribute sites spatially and how to assign populations. The Marshall paper looks at populations aggregated to an admin level. I know that there are studies on city sizes that look at different distributions~\cite{giesen2010size,eeckhout2004gibrat}.
+
+One paper constructs cities from data using an algorithm~\cite{rozenfeld2008laws,rozenfeld2011area}. ``To define
+a CCA cluster, we first locate a populated site. Then, we recursively grow the cluster by
+adding all nearest-neighbor sites (populated sites within a distance smaller than the coarsegraining level, $l$, from any site within the cluster) with a population density, $D$, larger than
+a threshold $D^∗$. The cluster stops growing when no site outside the cluster with population
+density $D > D^∗$ is at a distance smaller than $l$ from the cluster boundary.''
+
+We could investigate this question numerically.
+\begin{enumerate}
+  \item Generate a set of sites with populations from Zipf's law, which is the Pareto distribution. Place them on a surface. Make travel distributions from a kernel, and make sample data from that.
+  \item Create copies of the same data using clustering. Put the same sample data onto this aggregated set of sites.
+  \item Infer parameters for a movement kernel from the sites themselves and from several levels of aggregation.
+\end{enumerate}
+I'd want to do this for several samples to see a trend.
+
+
 \section{Influence Curve}
 
-Let's stick with the destination kernel, not the full Simple Trip travel model, and let's calculate the influence curve as we turn on the tourist index.
+Sean Wu asked about the influence curve of the tourist index. An influence curve is a way to determine how much an estimated value is affected by changes to the data. We're looking at this tourist index as a way to make data more reasonable, so maybe the influence curve is a good way to think about reasonableness of a dataset. Let's start by defining the influence curve.
+
+\subsection{Influence Curves}
+
+The most common example of an influence curve comes from its definition in Hampel's original article~\cite{hampel1974influence}. If you start with values, $x_i$, taken from a distribution, $F$, and the estimate of the mean is $\overbar{x} = \sum_i x_i / n$. If you add a point at a new location, $x$, the new mean is $(x-\overbar{x})/(n+1).$ The influence curve is how much the mean changes when you add a value.
+
+Hampel's definition defines the influence curve as a small change in an estimator, $T$, given a small change in the underlying distribution $F$. Because $F$ is multidimensional, the small change in $F$ is directional. He defines a change that is as small as $\epsilon$ in the $\delta_\omega$ direction.
+\begin{equation}
+  \mbox{IC}_{T,F}(\omega)=\mbox{lim}\left\{T[(1-\epsilon)F+\epsilon\delta_\omega]-T(F)\right\}/\epsilon.
+\end{equation}
+That helps with simple estimators. There is a more expansive, and clearer, discussion in Efron~\cite{efron1982jackknife}. He points out that the influence function is related to the jacknife and bootstrap methods. Those methods estimate uncertainty in an estimate of small-sample data. They do it by looking at values near the mean of the estimator. The influence function is part of a Taylor expansion of the estimator. Here, the estimator is $\theta$, the distribution is $F$, the empirical distribution is $\hat{F}$, and $X_i$ is a draw from $F$.
+\begin{equation}
+  \theta(\hat{F})=\theta(F) + \frac{1}{n}\sum_{i=1}^{n} \mbox{IF}(X_i) + O_p\left(1/n\right)
+\end{equation}
+That makes the influence curve the partial derivative of the estimator with respect to the data.
+
+I'm confused about how to use this definition for our problems because we usually have a single draw from an underlying distribution, not multiple draws. It's a spatial process to define points and a covariance on all points. Maybe that idea is holding me back. I should think about the observed data as a draw. Hold the spatial location and population count fixed, and the tourist covariate is a draw from an underlying distribution. Or is it the movement to that location should be the draw?
+
+
+\subsection{Problem Statement}
+
+Maybe we can get clearer about what we're doing. That means we define the model by defining the stochastic process and the data. We can ask about the tourist index using the destination kernel, not the full Simple Trip travel model, so let's use the simpler model. The data is
+\begin{enumerate}
+  \item Site location in $(x,y)$, population $N_i$.
+  \item Number of trips from site 0 to site $j$ for all $j\ne 0$.
+  \item Tourist index, which is a covariate that affects desirability of each site.
+  \item Tourist trips to each site, $j$, which is the sum of trips from all starting sites to site $j$.
+  \end{enumerate}
+The fourth item is the tourist index, stated as a number of trips instead of a percentage of the population. Those two quantities are proportional, related by the average length of a stay.
 
 Take a gravity kernel
 \begin{equation}
@@ -291,7 +338,10 @@ which inserts into a destination probability $P(j|i)\propto N_j^{\tau}k(d_{i,j})
   P(j|i) = \frac{k(d_{i,j})\exp(\beta X_j)}{\sum_{j} k(d_{i,j})\exp(\beta X_j)}.
 \end{equation}
 
+In order to use the tourist index, we need to calculate $P(j|i)$ for \emph{every site}. Then sum the number of trips to each site, according to the current kernel. It should be quadratic in the number of sites, which is much more computationally intensive.
+
 How can we get an influence curve? Generate data from a tourist model. Fit without a tourist model. Then introduce a covariate on one place? If we set a small value for the covariate, then that doesn't do much because it would just give us a larger $\beta$. Or do we add a site and see how that affects the estimate?
+
 
 \bibliographystyle{ieeetr}
 \bibliography{tourist}
