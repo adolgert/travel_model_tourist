@@ -35,7 +35,7 @@ function hard_sphere_process(K, core_fraction = 0.02)
     transpose(hcat(x, y))
 end
 
-size(hard_sphere_process(1000, 0.02), 2)
+# size(hard_sphere_process(1000, 0.02), 2)
 
 
 r"""
