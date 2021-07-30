@@ -343,6 +343,40 @@ In order to use the tourist index, we need to calculate $P(j|i)$ for \emph{every
 How can we get an influence curve? Generate data from a tourist model. Fit without a tourist model. Then introduce a covariate on one place? If we set a small value for the covariate, then that doesn't do much because it would just give us a larger $\beta$. Or do we add a site and see how that affects the estimate?
 
 
+\subsection{Using Tourist Estimates to Regularize the Kernel}
+
+Will the models produce less extreme values than models without the tourist index? These are gravity models with a multiplicative covariate. That covariate drives outbound travel, so it puts weights on destinations. This doesn't seem like it will limit the total number of inbound people, which is the number that can be ridiculous with a travel model.
+
+Can we solve the model from the opposite direction? What if we knew the number of people visiting each place? Could we then guess a distance kernel? For instance, could we make an empirical distance kernel?
+
+\section{Using Tourists to Regularize Transport}
+
+Our goal is to predict movement without making wild predictions. A pure gravity model, for instance, will make wild predictions when the distance between source and destination is small. The models above, which added a covariate to a gravity model, would still have this problem that nearby destinations would be very large. That problem will remain if we state the model as a gravity model with some modification. This section tries to state the model in a way that will take any transportation, including the gravity model, and make reasonable predictions from it.
+
+We set up our model system with three quantities. There are source sites, $i$. Each source site has a population $p_i$. It has a total number of people who travel during a time period, determined by a travel rate times the population. There are destination sites, which are the same as the source sites, but we label them with $j$ because they have a separate piece of information, the total number of inbound travelers over the time period. These might as well be different sites. Between $i$ and $j$, we set up a transportation network. Each site $i$ is connected to every site $j$ which is not the origin.
+
+There is a classic problem, called the Hitchcock transportation problem, where a set of sources $i$ connect to destinations $j$, with a cost for each $x_{ij}$ transport. The goal is to move source product to meet needs at the destination. Our problem differs in two ways. We don't have a complete set of $i$--$j$ connections because people don't travel to their own site. We also don't have transportation costs. We have, instead, a likelihood that a person travels a certain distance. This distribution comes from the travel model. That gives us an optimization problem that looks less like this transportation problem and more like an Earth-Mover's Distance problem.
+
+If we laber the number of people traveling from $i$ to $j$ as $x_{ij}$, then we need to constrain outbound travelers to match source populations, $\gamma_i p_i = \sum_j x_{ij}$, where $\gamma$ is a rate of travel per person per time interval. We also claim to have a tourist index for places, derived from local population and lodging covariates, so each location constrains $r_j = \sum_i x_{ij}$. We need to pose the problem so that the travelers equal the lodgers, $\sum_i \gamma_i p_i = \sum_j r_j$, or there won't be a feasible solution.
+
+The objective of this travel model is to ensure people generally obey the gravity model (or other) while not overwhelming the tourist index. The gravity model provides a distribution of how many people would travel to each site, and that distribution is decided by distance. That gravity model provides a distribution over destinations for each origin, so it overdetermines the system. We can minimize the deviation from those distributions.
+
+We will take the gravity model as a set of priors on the distribution of travel destinations.
+\begin{equation}
+  d_{ij} \sim \mbox{Dirichlet}(k_{ij})
+\end{equation}
+Here, the $k_{ij}$ are the probability of going from $i$ to $j$. Then we use the tourist index as a single observation of where people go. It is a sum over travelers from all sources.
+\begin{equation}
+  r_i \sim \mbox{N}\left(\sum_{j\ne i} p_j d_{ij}, \sigma \right)
+\end{equation}
+The $p_j$ is the source population. Each tourist index, $r_i$, is a count of incoming travelers. We assume this has a Gaussian error.
+
+Those two equations above are enought to take a distance kernel as a prior and soften its extreme peaks so that they agree with numbers of travelers to a destination. They can be solved with a Hamiltonian Monte Carlo. The output is a distribution of Dirichlet parameter draws. If you want a sample of travel, you draw from the parameter posteriors, then use those to draw a number of travelers from a Dirichlet distribution. See Fig.~\ref{fig:hmc-posterior} for posteriors from a run with six sites, doing 10,000 samples.
+
+\begin{figure}
+\includegraphics[height=8in]{dirichlet_driven.png}
+\caption{For six sites, there are $6\times 5$ kernel probabilities. These are posteriors for those from HMC.\label{fig:hmc-posterior}}
+\end{figure}
 \bibliographystyle{ieeetr}
 \bibliography{tourist}
 \end{document}

@@ -1,4 +1,7 @@
 """
+The goal of this version is to ask whether, when fitting movement data from one, or a few,
+locations in a country, we can use the locations and populations from other sites in the country,
+combined with a covariate on travel to sites, to inform our estimate of kernel parameters.
 This version fits the following data:
 
 1. Location of every site.
@@ -30,9 +33,11 @@ include("sitegen.jl")
 
 r"""
 This gravity model is from Eqs. 1 and 2 from the Marshall paper.
+Get the type from the parameter because that's what carries the implicit differentiation type.
+Nj is population at site j. dij is distance i to j. θ are parameters.
 """
-# Get the type from the parameter because that's what carries the implicit differentiation type.
 gravity_model(Nj, dij, θ) = Nj^θ[:τ] * (one(θ[:ρ]) + dij / θ[:ρ])^(-θ[:α])
+"""The dest_kernel is the gravity model, above."""
 tourist_model(dest_kernel, Nj, dij, Xj, θ) = dest_kernel(Nj, dij, θ) * exp(θ[:β] * Xj)
 
 
@@ -43,7 +48,10 @@ function show_gravity_cutoff_smaller_than_region(θ)
 end
 
 
-# This will fit a gravity model. Just that.
+# The tourist/gravity models aren't normalized. They are a likelihood to go to a destination.
+# This calculates likelihoods across all destinations and then normalizes.
+# source is origin site. Nj is population at sites. Xj is tourist covariate at sites.
+# distance matrix is from i to j. θ is a dictionary, or named tuple, of parameters.
 function probability_leave_site(source, Nj, Xj, distance_matrix, θ)
     p = zeros(Float64, K)
     for gen_idx in 1:K
@@ -57,8 +65,13 @@ end
 
 
 # This returns an aggregate number of inbound trips to each site from all other sites.
+# This doesn't sample. It calculates the expected number.
 # It is a rate per year, per person. You can think of it as the total inbound trips if each
-# person at each site took one trip per year. Multiply by a rate of trips per year, as desired.
+# person at each site took one trip per year.
+# inbound_trips - this array will contain the result for each site.
+# rate - Multiply by a rate of trips per year, as desired.
+# Nj - population at site, Xj - tourist covariate. distance_matrix between pairs of sites.
+# θ - parameter dictionary.
 function tourist_trips!(inbound_trips, rate, Nj, Xj, distance_matrix, θ)
     T = typeof(θ[:α])
     K = length(inbound_trips)
@@ -83,12 +96,12 @@ rng = Random.MersenneTwister(9283742)
 
 params = (β = 0.3, α = 3.62, ρ = 0.1, τ = 1.0, zα = 1.74)
 
-K_requested = 30
+K_requested = 30  # Number of sites. Approximate.
 total_population = 10000
 # Locations are in [0, 1] x [0, 1].
 # Smallest pops are greater than 1. Largest pops are near 20 or 200.
 locations, pops_raw = zipf_sites(rng, K_requested, params[:zα])
-K = size(locations, 2)
+K = size(locations, 2)  # Actual number of sites, after stochastic generation.
 Nj = pops_raw .* (total_population ./ sum(pops_raw))
 # Tourism covariate.
 Xj = rand(rng, Distributions.Normal(0, 0.5), K)
@@ -107,10 +120,10 @@ data_site = (1:K)[sortperm(vec(Nj), rev=true)][nth_largest_site]
 
 p = probability_leave_site(data_site, Nj, Xj, distance_matrix, params)
 draws = 10000
-rate_multiplier = draws / Nj[data_site]
 
 outbound_trips = convert(Vector{Float64}, rand(rng, Multinomial(draws, p)))
 inbound_trips = zeros(Float64, K)
+rate_multiplier = draws / Nj[data_site]
 tourist_trips!(inbound_trips, rate_multiplier, Nj, Xj, distance_matrix, params)
 
 
